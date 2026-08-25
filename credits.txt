@@ -1,0 +1,6 @@
+Сделано для LITjam 2026
+Levipanic
+
+Музыка: Alias Conrad Coldwood
+
+Визуал украден у IKEA

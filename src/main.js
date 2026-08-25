@@ -1,5 +1,5 @@
 import "./styles.css";
-import { ASSETS, MUSIC_TRACKS, prepareCriticalImages, preparePage, warmPagesAfter } from "./assets.js";
+import { ASSETS, CREDITS_TRACK, MUSIC_CUES, prepareCriticalImages, preparePage, warmPagesAfter } from "./assets.js";
 import { AudioEngine } from "./audio.js";
 import { COPY, DEV_MODE, MOBILE_BREAKPOINT, PAGE_COUNT, TIMINGS } from "./config.js";
 
@@ -67,10 +67,17 @@ function isMobileWidth() {
   return window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT}px)`).matches;
 }
 
-function chooseTrack(excludedTracks = []) {
-  const excludedUrls = new Set(excludedTracks.filter(Boolean).map((track) => track.url));
-  const choices = MUSIC_TRACKS.filter((track) => !excludedUrls.has(track.url));
-  return choices[Math.floor(Math.random() * choices.length)];
+function musicForPage(page) {
+  let track = MUSIC_CUES[0].track;
+  for (const cue of MUSIC_CUES) {
+    if (cue.page > page) break;
+    track = cue.track;
+  }
+  return track;
+}
+
+function musicForTarget(target) {
+  return target === PAGE_COUNT ? CREDITS_TRACK : musicForPage(target);
 }
 
 function prepareTrack(track) {
@@ -94,8 +101,23 @@ function prepareTrack(track) {
 }
 
 function prepareNextMusic() {
-  const track = chooseTrack([state.currentMusic]);
+  const nextCue = MUSIC_CUES.find((cue) => cue.page > state.furthestPageReached);
+  setPreparedMusic(nextCue?.track ?? CREDITS_TRACK);
+}
+
+function setPreparedMusic(track) {
+  if (preparedMusic?.track.url === track.url) return preparedMusic;
+
+  const obsoleteMusic = preparedMusic;
   preparedMusic = prepareTrack(track);
+  if (obsoleteMusic) {
+    obsoleteMusic.promise.then(() => audio.releaseBuffer(obsoleteMusic.track.url));
+  }
+  return preparedMusic;
+}
+
+function playMusic(track) {
+  return audio.playTrack(track.url, TIMINGS.crossfade, track.loop !== false);
 }
 
 function audioControls() {
@@ -269,7 +291,9 @@ function creditsScreen() {
   return `
     <section class="center-screen credits-screen">
       <p class="credits-screen__title">${COPY.title}</p>
-      <p>Конец</p>
+      <p>Сделано для LITjam 2026<br>Levipanic</p>
+      <p>Музыка: Alias Conrad Coldwood</p>
+      <p>Визуал украден у IKEA</p>
       <button class="plain-button" type="button" data-action="restart">начать сначала(?)</button>
       ${navigationError()}
     </section>
@@ -370,7 +394,7 @@ async function beginIntro() {
   state.introHasLogo = false;
   state.introFading = false;
   state.screen = "intro";
-  firstMusic = prepareTrack(chooseTrack());
+  firstMusic = prepareTrack(MUSIC_CUES[0].track);
   firstMusic.promise.then(() => {
     if (state.screen === "title") {
       render();
@@ -391,9 +415,12 @@ async function beginIntro() {
 
   await delay(120);
   if (runId !== experienceId) return;
+  const prerollPromise = audio.playOneShot(ASSETS.intro.first);
+  await delay(1000);
+  if (runId !== experienceId) return;
   state.introLabel = "unproductive";
   render();
-  await audio.playOneShot(ASSETS.intro.first);
+  await prerollPromise;
 
   if (runId !== experienceId) return;
   state.introHasFunTime = true;
@@ -444,7 +471,7 @@ async function enterReader() {
   firstMusic = null;
   warmPagesAfter(0);
   try {
-    await audio.playTrack(track.url, TIMINGS.crossfade);
+    await playMusic(track);
     prepareNextMusic();
   } catch (error) {
     showPlaybackError(track, error);
@@ -487,10 +514,8 @@ function pulseCooldownBar() {
   bar.classList.add("is-pulsing");
 }
 
-async function waitForPreparedMusic() {
-  if (!preparedMusic) {
-    prepareNextMusic();
-  }
+async function waitForPreparedMusic(track) {
+  setPreparedMusic(track);
   await preparedMusic.promise;
   if (preparedMusic.status !== "ready") {
     throw preparedMusic.error;
@@ -502,7 +527,10 @@ async function ensureForwardAssets(target) {
     await preparePage(target);
   }
   if (target > state.furthestPageReached) {
-    await waitForPreparedMusic();
+    const targetMusic = musicForTarget(target);
+    if (targetMusic.url !== state.currentMusic.url) {
+      await waitForPreparedMusic(targetMusic);
+    }
   }
 }
 
@@ -574,7 +602,7 @@ async function retryNavigation() {
 
     try {
       await audio.prepareBuffer(track.url);
-      await audio.playTrack(track.url, TIMINGS.crossfade);
+      await playMusic(track);
       failedPlaybackTrack = null;
       state.navigationLocked = false;
       state.navigationError = null;
@@ -606,11 +634,15 @@ async function fadeCurrentPage() {
 async function showPage(target) {
   await fadeCurrentPage();
   const advanced = target > state.furthestPageReached;
-  const nextMusic = advanced ? preparedMusic : null;
+  const targetMusic = advanced ? musicForPage(target) : state.currentMusic;
+  const musicChanged = advanced && targetMusic.url !== state.currentMusic.url;
+  const nextMusic = musicChanged ? preparedMusic : null;
 
   state.currentPage = target;
   if (advanced) {
     state.furthestPageReached = target;
+  }
+  if (musicChanged) {
     state.currentMusic = nextMusic.track;
     preparedMusic = null;
   }
@@ -621,10 +653,10 @@ async function showPage(target) {
   app.querySelector(".reader-page-scroll")?.scrollTo({ top: 0, left: 0 });
   warmPagesAfter(target);
 
-  if (advanced) {
+  if (musicChanged) {
     const track = state.currentMusic;
     try {
-      await audio.playTrack(track.url, TIMINGS.crossfade);
+      await playMusic(track);
       prepareNextMusic();
     } catch (error) {
       showPlaybackError(track, error);
@@ -645,7 +677,7 @@ async function showCredits() {
   state.screen = "credits";
   render();
   try {
-    await audio.playTrack(state.currentMusic.url, TIMINGS.crossfade);
+    await playMusic(state.currentMusic);
   } catch (error) {
     showPlaybackError(state.currentMusic, error);
   }
@@ -665,10 +697,7 @@ async function devJump(target) {
   setNavigationUi("waiting");
 
   try {
-    await preparePage(target);
-    if (target > state.furthestPageReached) {
-      await waitForPreparedMusic();
-    }
+    await ensureForwardAssets(target);
     await showPage(target);
   } catch (error) {
     state.navigationError = error;

@@ -131,7 +131,7 @@ export class AudioEngine {
     });
   }
 
-  async playTrack(url, fadeDuration) {
+  async playTrack(url, fadeDuration, loop = true) {
     const buffer = await this.prepareBuffer(url);
     const source = this.context.createBufferSource();
     const gain = this.context.createGain();
@@ -140,9 +140,11 @@ export class AudioEngine {
     const transitionId = ++this.transitionId;
 
     source.buffer = buffer;
-    source.loop = true;
-    source.loopStart = 0;
-    source.loopEnd = buffer.duration;
+    source.loop = loop;
+    if (loop) {
+      source.loopStart = 0;
+      source.loopEnd = buffer.duration;
+    }
     source.connect(gain);
     gain.connect(this.master);
     gain.gain.setValueAtTime(0, now);
@@ -154,6 +156,13 @@ export class AudioEngine {
     this.activeDeck = nextDeck;
     this.decks.add(nextDeck);
     this.releaseBuffer(url);
+
+    if (!loop) {
+      source.addEventListener("ended", () => {
+        if (this.activeDeck === nextDeck) this.activeDeck = null;
+        this.stopDeck(nextDeck);
+      }, { once: true });
+    }
 
     if (!previous) {
       return;
