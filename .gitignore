@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.DS_Store
+*.log
+*.asd
+*.pdf
+/intropreroll.mp3
+/pages/*.af
+/photostocks/
+/plot.txt
+/tech.txt
