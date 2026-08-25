@@ -2,6 +2,7 @@ import "./styles.css";
 import { ASSETS, CREDITS_TRACK, MUSIC_CUES, prepareCriticalImages, preparePage, warmPagesAfter } from "./assets.js";
 import { AudioEngine } from "./audio.js";
 import { COPY, DEV_MODE, MOBILE_BREAKPOINT, PAGE_COUNT, TIMINGS } from "./config.js";
+import { createViewerController } from "./viewer.js";
 
 const app = document.querySelector("#app");
 const storageKey = "ordinary-manual-audio";
@@ -48,6 +49,8 @@ let firstMusic = null;
 let pendingNavigation = null;
 let failedPlaybackTrack = null;
 let cursorTimer = null;
+let currentPageImage = null;
+let viewerController = null;
 
 try {
   audio = new AudioEngine(preferences);
@@ -65,6 +68,11 @@ function saveAudioPreferences() {
 
 function isMobileWidth() {
   return window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT}px)`).matches;
+}
+
+function resetZoom() {
+  viewerController?.destroy();
+  viewerController = null;
 }
 
 function musicForPage(page) {
@@ -264,12 +272,7 @@ function readerScreen() {
   return `
     <section class="reader-screen">
       <div class="reader-page-scroll">
-        <img
-          class="reader-page page-enter"
-          src="${ASSETS.pages[state.currentPage]}"
-          alt="Страница ${state.currentPage + 1} из ${PAGE_COUNT}"
-          draggable="false"
-        />
+        <div class="reader-page-slot"></div>
       </div>
       <nav class="reader-controls" aria-label="Навигация по страницам">
         ${state.currentPage > 0
@@ -311,7 +314,17 @@ function render() {
     credits: creditsScreen,
   };
 
+  resetZoom();
   app.innerHTML = `${screens[state.screen]()}${audioControls()}${resumePrompt()}`;
+  if (state.screen === "reader" && currentPageImage) {
+    const viewport = app.querySelector(".reader-page-scroll");
+    const slot = app.querySelector(".reader-page-slot");
+    currentPageImage.className = "reader-page";
+    currentPageImage.alt = `Страница ${state.currentPage + 1} из ${PAGE_COUNT}`;
+    currentPageImage.draggable = false;
+    slot?.append(currentPageImage);
+    if (viewport) viewerController = createViewerController(viewport, currentPageImage);
+  }
   bindScreenEvents();
   updateCursorTimer();
 }
@@ -349,10 +362,10 @@ function bindScreenEvents() {
 }
 
 async function prepareInitialAssets() {
+  prepareInterfaceFont().catch(() => {});
   await Promise.all([
     prepareCriticalImages(),
     ...introUrls.map((url) => audio.prepareBuffer(url)),
-    prepareInterfaceFont(),
   ]);
 }
 
@@ -459,6 +472,14 @@ async function enterReader() {
     return;
   }
 
+  try {
+    currentPageImage = await preparePage(0);
+  } catch (error) {
+    state.loadingError = error;
+    render();
+    return;
+  }
+
   state.currentPage = 0;
   state.furthestPageReached = 0;
   state.currentMusic = firstMusic.track;
@@ -523,15 +544,15 @@ async function waitForPreparedMusic(track) {
 }
 
 async function ensureForwardAssets(target) {
-  if (target < PAGE_COUNT) {
-    await preparePage(target);
-  }
+  const requests = [];
+  if (target < PAGE_COUNT) requests.push(preparePage(target));
   if (target > state.furthestPageReached) {
     const targetMusic = musicForTarget(target);
     if (targetMusic.url !== state.currentMusic.url) {
-      await waitForPreparedMusic(targetMusic);
+      requests.push(waitForPreparedMusic(targetMusic));
     }
   }
+  await Promise.all(requests);
 }
 
 function forwardCooldown() {
@@ -555,14 +576,31 @@ async function requestNavigation(direction) {
   pendingNavigation = { target, runId };
 
   if (direction < 0) {
-    setNavigationUi("none");
-    await delay(DEV_MODE ? 0 : TIMINGS.backwardCooldown);
-    if (runId !== experienceId || state.screen !== "reader") return;
-    await showPage(target);
+    await continueBackwardNavigation();
     return;
   }
 
   await continueForwardNavigation();
+}
+
+async function continueBackwardNavigation() {
+  const pending = pendingNavigation;
+  if (!pending) return;
+  state.navigationError = null;
+  setNavigationUi("waiting");
+
+  try {
+    await preparePage(pending.target);
+  } catch (error) {
+    if (pending.runId !== experienceId) return;
+    state.navigationError = error;
+    render();
+    return;
+  }
+
+  await delay(DEV_MODE ? 0 : TIMINGS.backwardCooldown);
+  if (pending.runId !== experienceId || state.screen !== "reader") return;
+  await showPage(pending.target);
 }
 
 async function continueForwardNavigation() {
@@ -622,7 +660,11 @@ async function retryNavigation() {
   }
   state.navigationError = null;
   render();
-  continueForwardNavigation();
+  if (pendingNavigation.target < state.currentPage) {
+    continueBackwardNavigation();
+  } else {
+    continueForwardNavigation();
+  }
 }
 
 async function fadeCurrentPage() {
@@ -632,6 +674,7 @@ async function fadeCurrentPage() {
 }
 
 async function showPage(target) {
+  const nextPageImage = await preparePage(target);
   await fadeCurrentPage();
   const advanced = target > state.furthestPageReached;
   const targetMusic = advanced ? musicForPage(target) : state.currentMusic;
@@ -639,6 +682,7 @@ async function showPage(target) {
   const nextMusic = musicChanged ? preparedMusic : null;
 
   state.currentPage = target;
+  currentPageImage = nextPageImage;
   if (advanced) {
     state.furthestPageReached = target;
   }
@@ -649,6 +693,7 @@ async function showPage(target) {
   state.navigationError = null;
   pendingNavigation = null;
   render();
+  currentPageImage.classList.add("page-enter");
   setNavigationUi("none");
   app.querySelector(".reader-page-scroll")?.scrollTo({ top: 0, left: 0 });
   warmPagesAfter(target);
@@ -675,6 +720,7 @@ async function showCredits() {
   state.navigationLocked = false;
   pendingNavigation = null;
   state.screen = "credits";
+  resetZoom();
   render();
   try {
     await playMusic(state.currentMusic);
@@ -713,6 +759,8 @@ async function restartExperience() {
   preparedMusic = null;
   pendingNavigation = null;
   failedPlaybackTrack = null;
+  resetZoom();
+  currentPageImage = null;
   state.hasStarted = false;
   state.introLabel = "";
   state.introHasFunTime = false;

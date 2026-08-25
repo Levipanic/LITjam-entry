@@ -52,8 +52,54 @@ export const CREDITS_TRACK = {
 };
 
 const loadedImages = new Map();
+const IMAGE_TIMEOUT = 30000;
+const DECODE_TIMEOUT = 10000;
 
 const delay = (duration) => new Promise((resolve) => window.setTimeout(resolve, duration));
+
+function timeoutAfter(duration, message) {
+  return new Promise((_, reject) => {
+    window.setTimeout(() => reject(new Error(message)), duration);
+  });
+}
+
+function loadImageAttempt(url) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.decoding = "async";
+    const timeout = window.setTimeout(() => {
+      cleanup();
+      image.src = "";
+      reject(new Error(`Превышено время загрузки изображения: ${url}`));
+    }, IMAGE_TIMEOUT);
+
+    const cleanup = () => {
+      window.clearTimeout(timeout);
+      image.onload = null;
+      image.onerror = null;
+    };
+
+    image.onload = async () => {
+      cleanup();
+      try {
+        if (typeof image.decode === "function") {
+          await Promise.race([
+            image.decode(),
+            timeoutAfter(DECODE_TIMEOUT, `Превышено время обработки изображения: ${url}`),
+          ]);
+        }
+        resolve(image);
+      } catch (error) {
+        reject(error);
+      }
+    };
+    image.onerror = () => {
+      cleanup();
+      reject(new Error(`Не удалось загрузить изображение: ${url}`));
+    };
+    image.src = url;
+  });
+}
 
 async function loadImage(url, attempts = 3) {
   if (loadedImages.has(url)) {
@@ -65,32 +111,7 @@ async function loadImage(url, attempts = 3) {
 
     for (let attempt = 0; attempt < attempts; attempt += 1) {
       try {
-        const image = new Image();
-        image.decoding = "async";
-        image.src = url;
-
-        if (typeof image.decode === "function") {
-          try {
-            await image.decode();
-          } catch (error) {
-            if (image.complete && image.naturalWidth === 0) {
-              throw error;
-            }
-            if (!image.complete) {
-              await new Promise((resolve, reject) => {
-                image.onload = resolve;
-                image.onerror = () => reject(error);
-              });
-            }
-          }
-        } else {
-          await new Promise((resolve, reject) => {
-            image.onload = resolve;
-            image.onerror = reject;
-          });
-        }
-
-        return image;
+        return await loadImageAttempt(url);
       } catch (error) {
         lastError = error;
         if (attempt < attempts - 1) {

@@ -1,4 +1,12 @@
 const delay = (duration) => new Promise((resolve) => window.setTimeout(resolve, duration));
+const AUDIO_TIMEOUT = 45000;
+const DECODE_TIMEOUT = 15000;
+
+function timeoutAfter(duration, message) {
+  return new Promise((_, reject) => {
+    window.setTimeout(() => reject(new Error(message)), duration);
+  });
+}
 
 export class AudioEngine {
   constructor({ volume, muted }) {
@@ -79,18 +87,26 @@ export class AudioEngine {
       let lastError;
 
       for (let attempt = 0; attempt < attempts; attempt += 1) {
+        const controller = new AbortController();
+        const timeout = window.setTimeout(() => controller.abort(), AUDIO_TIMEOUT);
         try {
-          const response = await fetch(url, { cache: "force-cache" });
+          const response = await fetch(url, { cache: "force-cache", signal: controller.signal });
           if (!response.ok) {
             throw new Error(`HTTP ${response.status}`);
           }
           const bytes = await response.arrayBuffer();
-          return await this.context.decodeAudioData(bytes.slice(0));
+          window.clearTimeout(timeout);
+          return await Promise.race([
+            this.context.decodeAudioData(bytes),
+            timeoutAfter(DECODE_TIMEOUT, `Превышено время обработки аудио: ${url}`),
+          ]);
         } catch (error) {
-          lastError = error;
+          lastError = error.name === "AbortError" ? new Error(`Превышено время загрузки аудио: ${url}`) : error;
           if (attempt < attempts - 1) {
             await delay(500 * 2 ** attempt);
           }
+        } finally {
+          window.clearTimeout(timeout);
         }
       }
 
