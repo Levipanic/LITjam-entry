@@ -26,26 +26,26 @@ export const ASSETS = {
   logo: new URL("../logo.png", import.meta.url).href,
   pages: pageUrls,
   intro: {
-    first: new URL("../intropreroll1.mp3", import.meta.url).href,
-    second: new URL("../intropreroll2.mp3", import.meta.url).href,
-    cat: new URL("../cat.mp3", import.meta.url).href,
+    first: new URL("../audio/intropreroll1.mp3", import.meta.url).href,
+    second: new URL("../audio/intropreroll2.mp3", import.meta.url).href,
+    cat: new URL("../audio/cat.mp3", import.meta.url).href,
   },
 };
 
 export const MUSIC_TRACKS = [
-  { name: "Clockwork", url: new URL("../Clockwork.mp3", import.meta.url).href },
-  { name: "A Stab of Happiness", url: new URL("../OFF - A Stab of Happiness.mp3", import.meta.url).href },
-  { name: "Brain Plague (Re-Reversed)", url: new URL("../OFF - Brain Plague (Re-Reversed).mp3", import.meta.url).href },
-  { name: "Brain Plague (Rewind)", url: new URL("../OFF - Brain Plague (Rewind).mp3", import.meta.url).href },
-  { name: "Burned Bodies", url: new URL("../OFF - Burned Bodies.mp3", import.meta.url).href },
-  { name: "DesperatelySafe", url: new URL("../OFF - DesperatelySafe.mp3", import.meta.url).href },
-  { name: "NotSafe", url: new URL("../OFF - NotSafe.mp3", import.meta.url).href },
-  { name: "childsplay", url: new URL("../childsplay.mp3", import.meta.url).href },
-  { name: "dramaticcrusendo", url: new URL("../dramaticcrusendo.mp3", import.meta.url).href },
-  { name: "go-on", url: new URL("../go-on.mp3", import.meta.url).href },
-  { name: "greypencil", url: new URL("../greypencil.mp3", import.meta.url).href },
-  { name: "inrainydaynorain", url: new URL("../inrainydaynorain.mp3", import.meta.url).href },
-  { name: "manualbegins", url: new URL("../manualbegins.mp3", import.meta.url).href },
+  { name: "Clockwork", url: new URL("../audio/Clockwork.mp3", import.meta.url).href },
+  { name: "A Stab of Happiness", url: new URL("../audio/OFF - A Stab of Happiness.mp3", import.meta.url).href },
+  { name: "Brain Plague (Re-Reversed)", url: new URL("../audio/OFF - Brain Plague (Re-Reversed).mp3", import.meta.url).href },
+  { name: "Brain Plague (Rewind)", url: new URL("../audio/OFF - Brain Plague (Rewind).mp3", import.meta.url).href },
+  { name: "Burned Bodies", url: new URL("../audio/OFF - Burned Bodies.mp3", import.meta.url).href },
+  { name: "DesperatelySafe", url: new URL("../audio/OFF - DesperatelySafe.mp3", import.meta.url).href },
+  { name: "NotSafe", url: new URL("../audio/OFF - NotSafe.mp3", import.meta.url).href },
+  { name: "childsplay", url: new URL("../audio/childsplay.mp3", import.meta.url).href },
+  { name: "dramaticcrusendo", url: new URL("../audio/dramaticcrusendo.mp3", import.meta.url).href },
+  { name: "go-on", url: new URL("../audio/go-on.mp3", import.meta.url).href },
+  { name: "greypencil", url: new URL("../audio/greypencil.mp3", import.meta.url).href },
+  { name: "inrainydaynorain", url: new URL("../audio/inrainydaynorain.mp3", import.meta.url).href },
+  { name: "manualbegins", url: new URL("../audio/manualbegins.mp3", import.meta.url).href },
 ];
 
 const loadedImages = new Map();

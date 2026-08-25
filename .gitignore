@@ -4,7 +4,7 @@ dist/
 *.log
 *.asd
 *.pdf
-/intropreroll.mp3
+/audio/intropreroll.mp3
 /pages/*.af
 /photostocks/
 /plot.txt
